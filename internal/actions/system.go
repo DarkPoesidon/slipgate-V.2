@@ -6,6 +6,7 @@ func init() {
 		Name:     "Install",
 		Category: "system",
 		Inputs: []InputField{
+			{Key: "transports", Label: "Transports to install (numbers, names, or all)", CLIOnly: true},
 			{Key: "cloudflare-dns", Label: "Automatically configure Cloudflare DNS (yes/no)", CLIOnly: true},
 		},
 	})

@@ -88,10 +88,28 @@ install -m 0755 "$TMP_BIN" "${INSTALL_DIR}/slipgate"
 chmod +x "${INSTALL_DIR}/slipgate"
 
 info "Running slipgate install..."
+INSTALL_TRANSPORTS="${SLIPGATE_INSTALL_TRANSPORTS:-}"
+if [[ -z "$INSTALL_TRANSPORTS" ]]; then
+    echo
+    echo "  Which transports do you want to install?"
+    echo
+    echo "  Transports:"
+    echo "    1) DNSTT / NoizDNS — DNS tunnel"
+    echo "    2) Slipstream — QUIC DNS tunnel"
+    echo "    3) VayDNS — KCP DNS tunnel"
+    echo "    4) NaiveProxy — HTTPS proxy with Caddy"
+    echo "    5) StunTLS — SSH over TLS + WebSocket proxy"
+    echo "    6) SSH — Direct SSH tunnel"
+    echo "    7) SOCKS5 — Direct SOCKS5 proxy"
+    echo "    8) All"
+    printf "  Choice (comma-separated, e.g. 1,3,4): " >/dev/tty
+    IFS= read -r INSTALL_TRANSPORTS </dev/tty
+fi
+
 # Route all I/O through /dev/tty so slipgate talks directly to the
 # controlling terminal regardless of how this script was invoked
 # (e.g. curl | sudo bash, where sudo's use_pty relay can stall output).
-if ! SLIPGATE_SIMPLE_PROMPT=1 "${INSTALL_DIR}/slipgate" install </dev/tty >/dev/tty 2>/dev/tty; then
+if ! SLIPGATE_SIMPLE_PROMPT=1 "${INSTALL_DIR}/slipgate" install --transports "$INSTALL_TRANSPORTS" </dev/tty >/dev/tty 2>/dev/tty; then
     error "slipgate install failed — run 'sudo slipgate install' to retry"
 fi
 

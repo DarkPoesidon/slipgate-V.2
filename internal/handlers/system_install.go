@@ -51,11 +51,17 @@ func handleSystemInstall(ctx *actions.Context) error {
 	// and leaving the user stuck at an invisible cursor.
 	// ═══════════════════════════════════════════════════════════════
 
-	out.Print("")
-	out.Print("  Which transports do you want to install?")
-	transports, err := prompt.MultiSelect("Transports", actions.InstallTransportOptions)
+	transports, err := parseInstallTransports(ctx.GetArg("transports"))
 	if err != nil {
 		return err
+	}
+	if len(transports) == 0 {
+		out.Print("")
+		out.Print("  Which transports do you want to install?")
+		transports, err = prompt.MultiSelect("Transports", actions.InstallTransportOptions)
+		if err != nil {
+			return err
+		}
 	}
 	if len(transports) == 0 {
 		return actions.NewError(actions.SystemInstall, "no transports selected", nil)
@@ -815,6 +821,66 @@ func handleSystemInstall(ctx *actions.Context) error {
 type naiveURIVariant struct {
 	backend string
 	tag     string
+}
+
+func parseInstallTransports(raw string) ([]string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+
+	allIdx := len(actions.InstallTransportOptions) + 1
+	seen := make(map[string]bool)
+	var result []string
+
+	addAll := func() []string {
+		all := make([]string, 0, len(actions.InstallTransportOptions))
+		for _, opt := range actions.InstallTransportOptions {
+			all = append(all, opt.Value)
+		}
+		return all
+	}
+
+	for _, part := range strings.Split(raw, ",") {
+		part = strings.TrimSpace(strings.ToLower(part))
+		if part == "" {
+			continue
+		}
+		if part == "all" {
+			return addAll(), nil
+		}
+		if n, err := strconv.Atoi(part); err == nil {
+			if n == allIdx {
+				return addAll(), nil
+			}
+			if n < 1 || n > len(actions.InstallTransportOptions) {
+				return nil, fmt.Errorf("invalid transport choice: %s", part)
+			}
+			opt := actions.InstallTransportOptions[n-1]
+			if !seen[opt.Value] {
+				seen[opt.Value] = true
+				result = append(result, opt.Value)
+			}
+			continue
+		}
+
+		matched := false
+		for _, opt := range actions.InstallTransportOptions {
+			if part == strings.ToLower(opt.Value) {
+				if !seen[opt.Value] {
+					seen[opt.Value] = true
+					result = append(result, opt.Value)
+				}
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return nil, fmt.Errorf("invalid transport choice: %s", part)
+		}
+	}
+
+	return result, nil
 }
 
 // naiveAwareVariants returns the (backend, tag) pairs that should each
