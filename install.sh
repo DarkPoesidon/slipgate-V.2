@@ -1,116 +1,235 @@
-#!/bin/bash
-# SlipGate installer — download binary and run `slipgate install`
-set -e
+#!/usr/bin/env bash
+# SlipGate one-click installer.
+set -Eeuo pipefail
 
-# Override with SLIPGATE_REPO=owner/repo when testing a fork.
 REPO="${SLIPGATE_REPO:-DarkPoesidon/slipgate-V.2}"
-INSTALL_DIR="/usr/local/bin"
+INSTALL_DIR="${SLIPGATE_INSTALL_DIR:-/usr/local/bin}"
+TTY="/dev/tty"
 
-# Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
 CYAN='\033[1;36m'
 NC='\033[0m'
 
-info()    { echo -e "${GREEN}[+]${NC} $1"; }
-error()   { echo -e "${RED}[-]${NC} $1"; exit 1; }
+info() { echo -e "${GREEN}[+]${NC} $*"; }
+warn() { echo -e "${YELLOW}[!]${NC} $*" >&2; }
+error() { echo -e "${RED}[-]${NC} $*" >&2; exit 1; }
 
-# Check root
-[[ $EUID -ne 0 ]] && error "This script must be run as root (sudo)"
+need_tty() {
+    [[ -r "$TTY" && -w "$TTY" ]] || error "No interactive terminal found. Run this installer from an SSH terminal, not from a background job."
+}
 
-# Detect architecture
-ARCH=$(uname -m)
-case "$ARCH" in
-    x86_64)  ARCH="amd64" ;;
-    aarch64) ARCH="arm64" ;;
-    *)       error "Unsupported architecture: $ARCH" ;;
-esac
-
-OS=$(uname -s | tr '[:upper:]' '[:lower:]')
-[[ "$OS" != "linux" ]] && error "SlipGate only supports Linux"
-
-BINARY="slipgate-${OS}-${ARCH}"
-
-# Override with: SLIPGATE_RELEASE_TAG=v1.5.1 bash install.sh
-RELEASE_TAG="${SLIPGATE_RELEASE_TAG:-}"
-CHANNEL=""  # ← set to "dev" on dev branch, empty on main
-
-if [[ -n "$RELEASE_TAG" ]]; then
-    URL="https://github.com/${REPO}/releases/download/${RELEASE_TAG}/${BINARY}"
-elif [[ "$CHANNEL" == "dev" ]]; then
-    # Find the latest dev pre-release tag via GitHub API
-    DEV_TAG=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases" \
-        | grep -o '"tag_name": *"[^"]*-dev"' | head -1 | grep -o '"[^"]*-dev"' | tr -d '"')
-    if [[ -n "$DEV_TAG" ]]; then
-        URL="https://github.com/${REPO}/releases/download/${DEV_TAG}/${BINARY}"
-        info "Dev channel: using release ${DEV_TAG}"
+ask() {
+    local prompt="$1"
+    local default="${2:-}"
+    local value
+    if [[ -n "$default" ]]; then
+        printf "  %s [%s]: " "$prompt" "$default" >"$TTY"
     else
-        URL="https://github.com/${REPO}/releases/latest/download/${BINARY}"
-        info "No dev release found, falling back to latest stable"
+        printf "  %s: " "$prompt" >"$TTY"
     fi
-else
-    URL="https://github.com/${REPO}/releases/latest/download/${BINARY}"
-fi
-
-echo -e "${CYAN}"
-echo "   _____ _ _       _____       _       "
-echo "  / ____| (_)     / ____|     | |      "
-echo " | (___ | |_ _ __| |  __  __ _| |_ ___ "
-echo "  \___ \| | | '_ \ | |_ |/ _\` | __/ _ \\"
-echo "  ____) | | | |_) | |__| | (_| | ||  __/"
-echo " |_____/|_|_| .__/ \_____|\__,_|\__\___|"
-echo "             | |                         "
-echo "             |_|                         "
-echo -e "${NC}"
-
-info "Downloading slipgate ($OS/$ARCH)..."
-TMP_BIN="$(mktemp)"
-trap 'rm -f "$TMP_BIN"' EXIT
-
-if command -v curl &>/dev/null; then
-    if ! curl -fsSL "$URL" -o "$TMP_BIN"; then
-        error "Could not download $BINARY from ${REPO}. Check that the GitHub release exists and includes this asset: $URL"
+    IFS= read -r value <"$TTY"
+    if [[ -z "$value" ]]; then
+        value="$default"
     fi
-elif command -v wget &>/dev/null; then
-    if ! wget -qO "$TMP_BIN" "$URL"; then
-        error "Could not download $BINARY from ${REPO}. Check that the GitHub release exists and includes this asset: $URL"
+    printf '%s' "$value"
+}
+
+ask_secret() {
+    local prompt="$1"
+    local value
+    printf "  %s: " "$prompt" >"$TTY"
+    IFS= read -r -s value <"$TTY"
+    printf "\n" >"$TTY"
+    printf '%s' "$value"
+}
+
+ask_yes_no() {
+    local prompt="$1"
+    local default="${2:-no}"
+    local suffix="[y/N]"
+    local value
+    if [[ "$default" == "yes" ]]; then
+        suffix="[Y/n]"
     fi
-else
-    error "Neither curl nor wget found"
-fi
+    while true; do
+        printf "  %s %s: " "$prompt" "$suffix" >"$TTY"
+        IFS= read -r value <"$TTY"
+        value="${value,,}"
+        if [[ -z "$value" ]]; then
+            value="$default"
+        fi
+        case "$value" in
+            y|yes|true|1|on) return 0 ;;
+            n|no|false|0|off) return 1 ;;
+            *) echo "  Please answer yes or no." >"$TTY" ;;
+        esac
+    done
+}
 
-# Kill any running slipgate/tunnel processes only after the replacement binary
-# has been downloaded successfully.
-killall slipgate 2>/dev/null || true
-killall dnstt-server 2>/dev/null || true
-killall slipstream-server 2>/dev/null || true
-install -m 0755 "$TMP_BIN" "${INSTALL_DIR}/slipgate"
-chmod +x "${INSTALL_DIR}/slipgate"
+detect_arch() {
+    case "$(uname -m)" in
+        x86_64) echo "amd64" ;;
+        aarch64|arm64) echo "arm64" ;;
+        *) error "Unsupported architecture: $(uname -m)" ;;
+    esac
+}
 
-info "Running slipgate install..."
-INSTALL_TRANSPORTS="${SLIPGATE_INSTALL_TRANSPORTS:-}"
-if [[ -z "$INSTALL_TRANSPORTS" ]]; then
-    echo
-    echo "  Which transports do you want to install?"
-    echo
-    echo "  Transports:"
-    echo "    1) DNSTT / NoizDNS — DNS tunnel"
-    echo "    2) Slipstream — QUIC DNS tunnel"
-    echo "    3) VayDNS — KCP DNS tunnel"
-    echo "    4) NaiveProxy — HTTPS proxy with Caddy"
-    echo "    5) StunTLS — SSH over TLS + WebSocket proxy"
-    echo "    6) SSH — Direct SSH tunnel"
-    echo "    7) SOCKS5 — Direct SOCKS5 proxy"
-    echo "    8) All"
-    printf "  Choice (comma-separated, e.g. 1,3,4): " >/dev/tty
-    IFS= read -r INSTALL_TRANSPORTS </dev/tty
-fi
+detect_public_ipv4() {
+    local ip=""
+    if command -v curl >/dev/null 2>&1; then
+        ip="$(curl -fsSL --max-time 5 https://api.ipify.org 2>/dev/null || true)"
+        [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && { echo "$ip"; return; }
+        ip="$(curl -fsSL --max-time 5 https://ifconfig.me/ip 2>/dev/null || true)"
+        [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && { echo "$ip"; return; }
+    fi
+    echo ""
+}
 
-# Route all I/O through /dev/tty so slipgate talks directly to the
-# controlling terminal regardless of how this script was invoked
-# (e.g. curl | sudo bash, where sudo's use_pty relay can stall output).
-if ! SLIPGATE_SIMPLE_PROMPT=1 "${INSTALL_DIR}/slipgate" install --transports "$INSTALL_TRANSPORTS" </dev/tty >/dev/tty 2>/dev/tty; then
-    error "slipgate install failed — run 'sudo slipgate install' to retry"
-fi
+download_file() {
+    local url="$1"
+    local dest="$2"
+    if command -v curl >/dev/null 2>&1; then
+        curl -fL --retry 3 --retry-delay 2 --connect-timeout 15 "$url" -o "$dest"
+    elif command -v wget >/dev/null 2>&1; then
+        wget -O "$dest" "$url"
+    else
+        error "Neither curl nor wget found"
+    fi
+}
 
-info "Done! Run 'sudo slipgate' to see the menu."
+print_banner() {
+    echo -e "${CYAN}"
+    echo "   _____ _ _       _____       _       "
+    echo "  / ____| (_)     / ____|     | |      "
+    echo " | (___ | |_ _ __| |  __  __ _| |_ ___ "
+    echo "  \___ \| | | '_ \ | |_ |/ _\` | __/ _ \\"
+    echo "  ____) | | | |_) | |__| | (_| | ||  __/"
+    echo " |_____/|_|_| .__/ \_____|\__,_|\__\___|"
+    echo "             | |                         "
+    echo "             |_|                         "
+    echo -e "${NC}"
+}
+
+collect_transports() {
+    local value="${SLIPGATE_INSTALL_TRANSPORTS:-}"
+    if [[ -n "$value" ]]; then
+        echo "$value"
+        return
+    fi
+
+    echo >"$TTY"
+    echo "  Which transports do you want to install?" >"$TTY"
+    echo >"$TTY"
+    echo "  Transports:" >"$TTY"
+    echo "    1) DNSTT / NoizDNS - DNS tunnel" >"$TTY"
+    echo "    2) Slipstream - QUIC DNS tunnel" >"$TTY"
+    echo "    3) VayDNS - KCP DNS tunnel" >"$TTY"
+    echo "    4) NaiveProxy - HTTPS proxy with Caddy" >"$TTY"
+    echo "    5) StunTLS - SSH over TLS + WebSocket proxy" >"$TTY"
+    echo "    6) SSH - Direct SSH tunnel" >"$TTY"
+    echo "    7) SOCKS5 - Direct SOCKS5 proxy" >"$TTY"
+    echo "    8) All" >"$TTY"
+    value="$(ask "Choice (comma-separated, e.g. 1,3,4)" "")"
+    [[ -n "$value" ]] || error "No transports selected"
+    echo "$value"
+}
+
+collect_cloudflare_args() {
+    local -n out_args_ref=$1
+    local cf_choice="${SLIPGATE_CLOUDFLARE_DNS:-}"
+    local cf_zone="${SLIPGATE_CLOUDFLARE_ZONE:-}"
+    local cf_ip="${SLIPGATE_CLOUDFLARE_IP:-}"
+    local cf_token="${CLOUDFLARE_API_TOKEN:-}"
+
+    echo >"$TTY"
+    echo "  Cloudflare DNS automation" >"$TTY"
+    echo "  SlipGate can create the required A and NS records automatically." >"$TTY"
+    echo "  Requirements:" >"$TTY"
+    echo "    - Domain is added to Cloudflare and shows Active" >"$TTY"
+    echo "    - Registrar nameservers point to Cloudflare" >"$TTY"
+    echo "    - API token has Zone:Read and DNS:Edit for this zone" >"$TTY"
+    echo "    - Records are DNS only / gray cloud" >"$TTY"
+    echo >"$TTY"
+
+    case "${cf_choice,,}" in
+        yes|true|1|on) ;;
+        no|false|0|off)
+            out_args_ref+=(--cloudflare-dns "no")
+            return
+            ;;
+        *)
+            if ! ask_yes_no "Configure Cloudflare DNS automatically during install?" "yes"; then
+                out_args_ref+=(--cloudflare-dns "no")
+                return
+            fi
+            ;;
+    esac
+
+    if [[ -z "$cf_zone" ]]; then
+        cf_zone="$(ask "Cloudflare zone/root domain (example.com)" "")"
+    fi
+    [[ -n "$cf_zone" ]] || error "Cloudflare zone/root domain is required for automatic DNS"
+
+    if [[ -z "$cf_ip" ]]; then
+        cf_ip="$(ask "Server public IPv4" "$(detect_public_ipv4)")"
+    fi
+    [[ "$cf_ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || error "A valid public IPv4 is required for Cloudflare DNS"
+
+    if [[ -z "$cf_token" ]]; then
+        cf_token="$(ask_secret "Cloudflare API token")"
+    fi
+    [[ -n "$cf_token" ]] || error "Cloudflare API token is required for automatic DNS"
+
+    export CLOUDFLARE_API_TOKEN="$cf_token"
+    out_args_ref+=(--cloudflare-dns "yes" --cloudflare-zone "$cf_zone" --cloudflare-ip "$cf_ip" --cloudflare-apply "yes")
+}
+
+main() {
+    [[ ${EUID:-$(id -u)} -eq 0 ]] || error "This script must be run as root (use sudo)"
+    need_tty
+
+    local os arch binary release_tag url tmp_bin
+    os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+    [[ "$os" == "linux" ]] || error "SlipGate only supports Linux"
+    arch="$(detect_arch)"
+    binary="slipgate-${os}-${arch}"
+    release_tag="${SLIPGATE_RELEASE_TAG:-}"
+
+    if [[ -n "$release_tag" ]]; then
+        url="https://github.com/${REPO}/releases/download/${release_tag}/${binary}"
+    else
+        url="https://github.com/${REPO}/releases/latest/download/${binary}"
+    fi
+
+    print_banner
+
+    tmp_bin="$(mktemp)"
+    trap 'rm -f "$tmp_bin"' EXIT
+
+    info "Downloading ${binary} from ${REPO}..."
+    download_file "$url" "$tmp_bin" || error "Could not download ${binary}. Checked: ${url}"
+
+    info "Installing slipgate to ${INSTALL_DIR}/slipgate..."
+    install -d -m 0755 "$INSTALL_DIR"
+    killall slipgate 2>/dev/null || true
+    killall dnstt-server 2>/dev/null || true
+    killall slipstream-server 2>/dev/null || true
+    install -m 0755 "$tmp_bin" "${INSTALL_DIR}/slipgate"
+
+    local transports
+    local -a install_args
+    transports="$(collect_transports)"
+    install_args=(install --transports "$transports")
+    collect_cloudflare_args install_args
+
+    info "Starting SlipGate installer..."
+    if ! SLIPGATE_SIMPLE_PROMPT=1 "${INSTALL_DIR}/slipgate" "${install_args[@]}" <"$TTY" >"$TTY" 2>"$TTY"; then
+        error "slipgate install failed. Retry with: sudo slipgate install"
+    fi
+
+    info "Done. Run 'sudo slipgate' to open the menu."
+}
+
+main "$@"

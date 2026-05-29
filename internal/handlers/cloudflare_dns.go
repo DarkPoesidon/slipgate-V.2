@@ -82,14 +82,20 @@ func offerCloudflareDNS(ctx *actions.Context, tunnels []config.TunnelConfig) {
 	}
 
 	defaultZone := inferZone(planned)
-	zoneName, err := prompt.String("Cloudflare zone/root domain", defaultZone)
-	if err != nil || zoneName == "" {
+	zoneName := strings.TrimSpace(ctx.GetArg("cloudflare-zone"))
+	if zoneName == "" {
+		zoneName, err = prompt.String("Cloudflare zone/root domain", defaultZone)
+	}
+	if err != nil || strings.TrimSpace(zoneName) == "" {
 		out.Warning("Cloudflare DNS setup skipped: zone is required")
 		return
 	}
 
 	defaultIP := detectPublicIPv4()
-	ip, err := prompt.String("Server public IPv4", defaultIP)
+	ip := strings.TrimSpace(ctx.GetArg("cloudflare-ip"))
+	if ip == "" {
+		ip, err = prompt.String("Server public IPv4", defaultIP)
+	}
 	if err != nil || net.ParseIP(ip) == nil || strings.Contains(ip, ":") {
 		out.Warning("Cloudflare DNS setup skipped: valid public IPv4 is required")
 		return
@@ -107,10 +113,12 @@ func offerCloudflareDNS(ctx *actions.Context, tunnels []config.TunnelConfig) {
 	out.Print("  different content are updated. Unsafe conflicts are skipped.")
 	out.Print("")
 
-	apply, err := prompt.ConfirmYes("Apply these Cloudflare DNS changes?")
-	if err != nil || !apply {
-		out.Print("  Cloudflare automation skipped before applying changes.")
-		return
+	if !isYes(ctx.GetArg("cloudflare-apply")) {
+		apply, err := prompt.ConfirmYes("Apply these Cloudflare DNS changes?")
+		if err != nil || !apply {
+			out.Print("  Cloudflare automation skipped before applying changes.")
+			return
+		}
 	}
 
 	result, err := applyCloudflareDNS(context.Background(), token, zoneName, planned)
@@ -138,6 +146,15 @@ func cloudflareMode(ctx *actions.Context) string {
 		return "prompt"
 	}
 	return "skip"
+}
+
+func isYes(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "yes", "true", "1", "on", "y":
+		return true
+	default:
+		return false
+	}
 }
 
 func buildCloudflareDNSPlan(tunnels []config.TunnelConfig) []dnsRecordPlan {

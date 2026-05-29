@@ -8,6 +8,9 @@ func init() {
 		Inputs: []InputField{
 			{Key: "transports", Label: "Transports to install (numbers, names, or all)", CLIOnly: true},
 			{Key: "cloudflare-dns", Label: "Automatically configure Cloudflare DNS (yes/no)", CLIOnly: true},
+			{Key: "cloudflare-zone", Label: "Cloudflare zone/root domain", CLIOnly: true},
+			{Key: "cloudflare-ip", Label: "Server public IPv4 for Cloudflare DNS", CLIOnly: true},
+			{Key: "cloudflare-apply", Label: "Apply Cloudflare DNS changes without confirmation (yes/no)", CLIOnly: true},
 		},
 	})
 
