@@ -128,7 +128,9 @@ func handleTunnelAdd(ctx *actions.Context) error {
 			cloudflareTunnels = append(cloudflareTunnels, *t)
 		}
 	}
-	offerCloudflareDNS(ctx, cloudflareTunnels)
+	if err := offerCloudflareDNS(ctx, cloudflareTunnels); err != nil {
+		return err
+	}
 
 	// Offer to create a user for tunnels that authenticate through our SSH /
 	// SOCKS backends. Naive and external tunnels manage their own creds.

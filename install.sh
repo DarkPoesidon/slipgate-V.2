@@ -113,7 +113,7 @@ cloudflare_preflight() {
     }
 
     if [[ "$response" != *'"success":true'* || "$response" != *'"id"'* ]]; then
-        error "Cloudflare zone ${zone} was not found or token cannot read it. Make sure the zone is Active and the token has Zone:Read and DNS:Edit for this specific zone."
+        error "Cloudflare zone ${zone} was not found or token cannot read it. Make sure the zone is Active and the token has Zone:Read plus DNS:Edit/DNS Write for this specific zone."
     fi
 }
 
@@ -167,7 +167,7 @@ collect_cloudflare_args() {
     echo "  Requirements:" >"$TTY"
     echo "    - Domain is added to Cloudflare and shows Active" >"$TTY"
     echo "    - Registrar nameservers point to Cloudflare" >"$TTY"
-    echo "    - API token has Zone:Read and DNS:Edit for this zone" >"$TTY"
+    echo "    - API token has Zone:Read and DNS:Edit (DNS Write) for this zone" >"$TTY"
     echo "    - Records are DNS only / gray cloud" >"$TTY"
     echo >"$TTY"
 

@@ -704,7 +704,9 @@ func handleSystemInstall(ctx *actions.Context) error {
 		}
 	}
 
-	offerCloudflareDNS(ctx, allTunnels)
+	if err := offerCloudflareDNS(ctx, allTunnels); err != nil {
+		return err
+	}
 
 	// ── Summary ────────────────────────────────────────────────────
 	out.Print("")

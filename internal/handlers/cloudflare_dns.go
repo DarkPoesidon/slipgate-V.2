@@ -28,13 +28,14 @@ type dnsPlanResult struct {
 	Updated []dnsRecordPlan
 	Kept    []dnsRecordPlan
 	Blocked []string
+	Missing []dnsRecordPlan
 }
 
-func offerCloudflareDNS(ctx *actions.Context, tunnels []config.TunnelConfig) {
+func offerCloudflareDNS(ctx *actions.Context, tunnels []config.TunnelConfig) error {
 	out := ctx.Output
 	planned := buildCloudflareDNSPlan(tunnels)
 	if len(planned) == 0 {
-		return
+		return nil
 	}
 
 	out.Print("")
@@ -44,7 +45,7 @@ func offerCloudflareDNS(ctx *actions.Context, tunnels []config.TunnelConfig) {
 	out.Print("  Before you continue, make sure:")
 	out.Print("    1) The root domain is added to Cloudflare and is Active.")
 	out.Print("    2) Your registrar nameservers point to the Cloudflare nameservers.")
-	out.Print("    3) Your API token has Zone:Read and DNS:Edit for this zone.")
+	out.Print("    3) Your API token has Zone:Read and DNS:Edit/DNS Write for this zone.")
 	out.Print("    4) Tunnel records must be DNS only (gray cloud), not proxied.")
 	out.Print("")
 	out.Print("  SlipGate will create/update these record types as needed:")
@@ -60,14 +61,14 @@ func offerCloudflareDNS(ctx *actions.Context, tunnels []config.TunnelConfig) {
 	mode := cloudflareMode(ctx)
 	if mode == "skip" {
 		out.Print("  Cloudflare automation skipped in non-interactive mode.")
-		return
+		return nil
 	}
 
 	if mode != "force" {
 		ok, err := prompt.ConfirmYes("Automatically configure Cloudflare DNS records now?")
 		if err != nil || !ok {
 			out.Print("  Cloudflare automation skipped. Use the DNS records in the summary below.")
-			return
+			return nil
 		}
 	}
 
@@ -77,7 +78,7 @@ func offerCloudflareDNS(ctx *actions.Context, tunnels []config.TunnelConfig) {
 		token, err = prompt.String("Cloudflare API token", "")
 		if err != nil || token == "" {
 			out.Warning("Cloudflare DNS setup skipped: API token is required")
-			return
+			return strictCloudflareErr(mode, "Cloudflare API token is required", nil)
 		}
 	}
 
@@ -88,7 +89,7 @@ func offerCloudflareDNS(ctx *actions.Context, tunnels []config.TunnelConfig) {
 	}
 	if err != nil || strings.TrimSpace(zoneName) == "" {
 		out.Warning("Cloudflare DNS setup skipped: zone is required")
-		return
+		return strictCloudflareErr(mode, "Cloudflare zone is required", nil)
 	}
 
 	defaultIP := detectPublicIPv4()
@@ -98,7 +99,7 @@ func offerCloudflareDNS(ctx *actions.Context, tunnels []config.TunnelConfig) {
 	}
 	if err != nil || net.ParseIP(ip) == nil || strings.Contains(ip, ":") {
 		out.Warning("Cloudflare DNS setup skipped: valid public IPv4 is required")
-		return
+		return strictCloudflareErr(mode, "valid public IPv4 is required for Cloudflare DNS", nil)
 	}
 
 	planned = fillRecordIP(planned, ip)
@@ -117,17 +118,28 @@ func offerCloudflareDNS(ctx *actions.Context, tunnels []config.TunnelConfig) {
 		apply, err := prompt.ConfirmYes("Apply these Cloudflare DNS changes?")
 		if err != nil || !apply {
 			out.Print("  Cloudflare automation skipped before applying changes.")
-			return
+			return strictCloudflareErr(mode, "Cloudflare DNS changes were not applied", nil)
 		}
 	}
 
 	result, err := applyCloudflareDNS(context.Background(), token, zoneName, planned)
 	if err != nil {
 		out.Warning("Cloudflare DNS setup failed: " + err.Error())
-		return
+		return strictCloudflareErr(mode, "Cloudflare DNS setup failed", err)
 	}
 
 	printCloudflareResult(out, result)
+	if mode == "force" && (len(result.Blocked) > 0 || len(result.Missing) > 0) {
+		return strictCloudflareErr(mode, "Cloudflare DNS setup did not complete; resolve the listed DNS conflicts/errors and rerun install", nil)
+	}
+	return nil
+}
+
+func strictCloudflareErr(mode, msg string, err error) error {
+	if mode != "force" {
+		return nil
+	}
+	return actions.NewError(actions.SystemInstall, msg, err)
 }
 
 func shouldPromptCloudflare(ctx *actions.Context) bool {
@@ -257,7 +269,39 @@ func applyCloudflareDNS(ctx context.Context, token, zoneName string, desired []d
 			result.Created = append(result.Created, want)
 		}
 	}
+
+	missing, err := verifyCloudflareDNS(ctx, client, zoneID, desired)
+	if err != nil {
+		return result, err
+	}
+	result.Missing = missing
 	return result, nil
+}
+
+func verifyCloudflareDNS(ctx context.Context, client *cloudflare.Client, zoneID string, desired []dnsRecordPlan) ([]dnsRecordPlan, error) {
+	var missing []dnsRecordPlan
+	for _, want := range desired {
+		existing, err := client.Records(ctx, zoneID, want.Name)
+		if err != nil {
+			return missing, err
+		}
+		found := false
+		for _, rec := range existing {
+			if strings.EqualFold(rec.Type, want.Type) && normalizeDNSName(rec.Content) == normalizeDNSName(want.Content) {
+				if want.Type == "A" || want.Type == "AAAA" || want.Type == "CNAME" {
+					if rec.Proxied != nil && *rec.Proxied != want.Proxied {
+						continue
+					}
+				}
+				found = true
+				break
+			}
+		}
+		if !found {
+			missing = append(missing, want)
+		}
+	}
+	return missing, nil
 }
 
 func decideCloudflareAction(want dnsRecordPlan, existing []cloudflare.Record) (string, cloudflare.Record, string) {
@@ -308,14 +352,17 @@ func printCloudflareResult(out actions.OutputWriter, result dnsPlanResult) {
 	for _, msg := range result.Blocked {
 		out.Warning("Skipped conflicting record: " + msg)
 	}
-	if len(result.Created) == 0 && len(result.Updated) == 0 && len(result.Kept) == 0 && len(result.Blocked) == 0 {
+	for _, rec := range result.Missing {
+		out.Warning(fmt.Sprintf("Missing after apply: %s %s -> %s", rec.Type, rec.Name, rec.Content))
+	}
+	if len(result.Created) == 0 && len(result.Updated) == 0 && len(result.Kept) == 0 && len(result.Blocked) == 0 && len(result.Missing) == 0 {
 		out.Warning("No Cloudflare DNS records were changed.")
 		return
 	}
-	if len(result.Blocked) == 0 {
+	if len(result.Blocked) == 0 && len(result.Missing) == 0 {
 		out.Success("Cloudflare DNS records are configured. No manual DNS setup is needed for the records above.")
 	} else {
-		out.Warning("Some Cloudflare DNS records still need manual cleanup because conflicts were detected.")
+		out.Warning("Some Cloudflare DNS records still need manual cleanup or token permission fixes.")
 	}
 }
 

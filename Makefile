@@ -1,4 +1,4 @@
-VERSION ?= 1.6.9
+VERSION ?= 1.6.10
 COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 LDFLAGS  = -X github.com/anonvector/slipgate/internal/version.Version=$(VERSION) \
            -X github.com/anonvector/slipgate/internal/version.Commit=$(COMMIT) \
