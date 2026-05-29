@@ -18,7 +18,7 @@ import (
 
 var httpClient = &http.Client{Timeout: 120 * time.Second}
 
-const releaseBaseURL = "https://github.com/anonvector/slipgate/releases"
+const releaseBaseURL = "https://github.com/DarkPoesidon/slipgate-V.2/releases"
 
 // OfflineDir, when set, makes EnsureInstalled copy binaries from this
 // directory instead of downloading. Used for SCP/offline installs.
@@ -26,7 +26,7 @@ var OfflineDir string
 
 const (
 	stableDownloadBase = releaseBaseURL + "/latest/download"
-	repoAPI            = "https://api.github.com/repos/anonvector/slipgate/releases"
+	repoAPI            = "https://api.github.com/repos/DarkPoesidon/slipgate-V.2/releases"
 )
 
 // DownloadBase returns the base URL for slipgate binary downloads.

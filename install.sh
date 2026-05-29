@@ -2,7 +2,8 @@
 # SlipGate installer — download binary and run `slipgate install`
 set -e
 
-REPO="anonvector/slipgate"
+# Override with SLIPGATE_REPO=owner/repo when testing a fork.
+REPO="${SLIPGATE_REPO:-DarkPoesidon/slipgate-V.2}"
 INSTALL_DIR="/usr/local/bin"
 
 # Colors

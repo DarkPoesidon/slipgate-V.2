@@ -1,7 +1,7 @@
 # SlipGate — Complete Operator Guide
 
 > The official server for the [SlipNet](https://github.com/anonvector/SlipNet) Android app.
-> Source: https://github.com/anonvector/slipgate
+> Source: https://github.com/DarkPoesidon/slipgate-V.2
 > SlipNet channel: [@SlipNet_app](https://t.me/SlipNet_app)
 
 ---
@@ -119,7 +119,7 @@ dig +short A ns.example.com
 SSH into your server as root, then run the installer:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/anonvector/slipgate/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/DarkPoesidon/slipgate-V.2/main/install.sh | sudo bash
 ```
 
 The script:
@@ -131,7 +131,7 @@ The script:
 
 **Offline install** (when your VPS can't reach GitHub directly):
 
-1. On your laptop, download from https://github.com/anonvector/slipgate/releases.
+1. On your laptop, download from https://github.com/DarkPoesidon/slipgate-V.2/releases.
 2. SCP the binaries to the server: `scp slipgate-* user@server:/tmp/slipgate/`
 3. On the server: `sudo slipgate install --bin-dir /tmp/slipgate`
 
@@ -524,7 +524,7 @@ Removes all services, configs, and binaries. Your DNS records are untouched — 
 ---
 
 Channel: [@SlipNet_app](https://t.me/SlipNet_app)
-SlipGate source: https://github.com/anonvector/slipgate
+SlipGate source: https://github.com/DarkPoesidon/slipgate-V.2
 SlipNet source: https://github.com/anonvector/SlipNet
 
 ---
@@ -533,7 +533,7 @@ SlipNet source: https://github.com/anonvector/SlipNet
 # راهنمای کامل SlipGate برای ادمین (فارسی)
 
 > سرور رسمی اپ اندرویدی [SlipNet](https://github.com/anonvector/SlipNet)
-> سورس: https://github.com/anonvector/slipgate
+> سورس: https://github.com/DarkPoesidon/slipgate-V.2
 > کانال SlipNet: [@SlipNet_app](https://t.me/SlipNet_app)
 
 ---
@@ -651,7 +651,7 @@ dig +short A ns.example.com
 با SSH به‌عنوان روت به سرور وصل شوید:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/anonvector/slipgate/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/DarkPoesidon/slipgate-V.2/main/install.sh | sudo bash
 ```
 
 اسکریپت:
@@ -663,7 +663,7 @@ curl -fsSL https://raw.githubusercontent.com/anonvector/slipgate/main/install.sh
 
 **نصب آفلاین** (اگر VPS به گیت‌هاب دسترسی ندارد):
 
-۱. روی لپ‌تاپ از https://github.com/anonvector/slipgate/releases دانلود کنید.
+۱. روی لپ‌تاپ از https://github.com/DarkPoesidon/slipgate-V.2/releases دانلود کنید.
 ۲. باینری‌ها را با SCP به سرور بفرستید: `scp slipgate-* user@server:/tmp/slipgate/`
 ۳. روی سرور: `sudo slipgate install --bin-dir /tmp/slipgate`
 
@@ -1056,5 +1056,5 @@ sudo slipgate uninstall
 ---
 
 کانال: [@SlipNet_app](https://t.me/SlipNet_app)
-سورس SlipGate: https://github.com/anonvector/slipgate
+سورس SlipGate: https://github.com/DarkPoesidon/slipgate-V.2
 سورس SlipNet: https://github.com/anonvector/SlipNet

@@ -2,8 +2,6 @@
 
 Unified tunnel manager for Linux servers. Manages DNS tunnels (DNSTT, NoizDNS, Slipstream, VayDNS) and HTTPS proxies (NaiveProxy) with systemd services, multi-tunnel DNS routing, and user management. Designed for use with the [SlipNet](https://github.com/anonvector/SlipNet) Android VPN app.
 
-[![oosmetrics](https://api.oosmetrics.com/api/v1/badge/achievement/12767996-2dd6-42ed-89a6-5f786c4662b4.svg)](https://oosmetrics.com/repo/anonvector/slipgate)
-
 ## Features
 
 - **Multi-transport**: DNSTT/NoizDNS (DNS tunnels with Curve25519 encryption), Slipstream (QUIC-based DNS), VayDNS (KCP-based DNS with Curve25519), NaiveProxy (HTTPS with Caddy), StunTLS (SSH over TLS + WebSocket)
@@ -31,29 +29,29 @@ Unified tunnel manager for Linux servers. Manages DNS tunnels (DNSTT, NoizDNS, S
 **One-liner install:**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/anonvector/slipgate/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/DarkPoesidon/slipgate-V.2/main/install.sh | sudo bash
 ```
 
 **Or build from source:**
 
 ```bash
-git clone https://github.com/anonvector/slipgate.git
-cd slipgate
+git clone https://github.com/DarkPoesidon/slipgate-V.2.git
+cd slipgate-V.2
 make build
 sudo ./slipgate install
 ```
 
 **Offline install (SCP to server):**
 
-Download the binaries you need from the [latest release](https://github.com/anonvector/slipgate/releases):
+Download the binaries you need from the [latest release](https://github.com/DarkPoesidon/slipgate-V.2/releases):
 
 ```bash
 # On your local machine — download binaries
 mkdir slipgate-bundle && cd slipgate-bundle
-curl -LO https://github.com/anonvector/slipgate/releases/latest/download/slipgate-linux-amd64
-curl -LO https://github.com/anonvector/slipgate/releases/latest/download/dnstt-server-linux-amd64
-curl -LO https://github.com/anonvector/slipgate/releases/latest/download/slipstream-server-linux-amd64
-curl -LO https://github.com/anonvector/slipgate/releases/latest/download/caddy-naive-linux-amd64
+curl -LO https://github.com/DarkPoesidon/slipgate-V.2/releases/latest/download/slipgate-linux-amd64
+curl -LO https://github.com/DarkPoesidon/slipgate-V.2/releases/latest/download/dnstt-server-linux-amd64
+curl -LO https://github.com/DarkPoesidon/slipgate-V.2/releases/latest/download/slipstream-server-linux-amd64
+curl -LO https://github.com/DarkPoesidon/slipgate-V.2/releases/latest/download/caddy-naive-linux-amd64
 
 # SCP to server
 scp * user@server:/tmp/slipgate/
