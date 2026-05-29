@@ -39,7 +39,7 @@ ask() {
 ask_secret() {
     local prompt="$1"
     local value
-    printf "  %s: " "$prompt" >"$TTY"
+    printf "  %s (input is hidden; paste it and press Enter): " "$prompt" >"$TTY"
     IFS= read -r -s value <"$TTY"
     printf "\n" >"$TTY"
     printf '%s' "$value"
@@ -96,6 +96,24 @@ download_file() {
         wget -O "$dest" "$url"
     else
         error "Neither curl nor wget found"
+    fi
+}
+
+cloudflare_preflight() {
+    local token="$1"
+    local zone="$2"
+    local response
+
+    info "Checking Cloudflare token and zone access..."
+    response="$(curl -fsS --connect-timeout 15 \
+        -H "Authorization: Bearer ${token}" \
+        -H "Content-Type: application/json" \
+        "https://api.cloudflare.com/client/v4/zones?name=${zone}&status=active" 2>&1)" || {
+        error "Cloudflare API check failed. Confirm the token is valid and has Zone:Read for ${zone}. Response: ${response}"
+    }
+
+    if [[ "$response" != *'"success":true'* || "$response" != *'"id"'* ]]; then
+        error "Cloudflare zone ${zone} was not found or token cannot read it. Make sure the zone is Active and the token has Zone:Read and DNS:Edit for this specific zone."
     fi
 }
 
@@ -181,6 +199,8 @@ collect_cloudflare_args() {
         cf_token="$(ask_secret "Cloudflare API token")"
     fi
     [[ -n "$cf_token" ]] || error "Cloudflare API token is required for automatic DNS"
+
+    cloudflare_preflight "$cf_token" "$cf_zone"
 
     export CLOUDFLARE_API_TOKEN="$cf_token"
     out_args_ref+=(--cloudflare-dns "yes" --cloudflare-zone "$cf_zone" --cloudflare-ip "$cf_ip" --cloudflare-apply "yes")
