@@ -63,21 +63,28 @@ echo "             | |                         "
 echo "             |_|                         "
 echo -e "${NC}"
 
-# Kill any running slipgate/tunnel processes and remove old binary
-killall slipgate 2>/dev/null || true
-killall dnstt-server 2>/dev/null || true
-killall slipstream-server 2>/dev/null || true
-rm -f "${INSTALL_DIR}/slipgate"
-
 info "Downloading slipgate ($OS/$ARCH)..."
+TMP_BIN="$(mktemp)"
+trap 'rm -f "$TMP_BIN"' EXIT
+
 if command -v curl &>/dev/null; then
-    curl -fsSL "$URL" -o "${INSTALL_DIR}/slipgate"
+    if ! curl -fsSL "$URL" -o "$TMP_BIN"; then
+        error "Could not download $BINARY from ${REPO}. Check that the GitHub release exists and includes this asset: $URL"
+    fi
 elif command -v wget &>/dev/null; then
-    wget -qO "${INSTALL_DIR}/slipgate" "$URL"
+    if ! wget -qO "$TMP_BIN" "$URL"; then
+        error "Could not download $BINARY from ${REPO}. Check that the GitHub release exists and includes this asset: $URL"
+    fi
 else
     error "Neither curl nor wget found"
 fi
 
+# Kill any running slipgate/tunnel processes only after the replacement binary
+# has been downloaded successfully.
+killall slipgate 2>/dev/null || true
+killall dnstt-server 2>/dev/null || true
+killall slipstream-server 2>/dev/null || true
+install -m 0755 "$TMP_BIN" "${INSTALL_DIR}/slipgate"
 chmod +x "${INSTALL_DIR}/slipgate"
 
 info "Running slipgate install..."
