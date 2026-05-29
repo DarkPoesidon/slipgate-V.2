@@ -317,6 +317,16 @@ NS  vs.example.com       → ns.example.com
 A   example.com           → <server IP>
 ```
 
+**Cloudflare automatic DNS**
+
+During install, choose Cloudflare DNS automation if your domain is managed in Cloudflare. SlipGate will preview and then create/update the required records as DNS-only:
+
+- `A ns.<root-domain> -> <server IP>` for DNS tunnel delegation
+- `NS <tunnel-subdomain> -> ns.<root-domain>` for DNSTT, Slipstream, and VayDNS tunnels
+- `A <root-or-naive-domain> -> <server IP>` for NaiveProxy/HTTPS
+
+Before using it, make sure the Cloudflare zone is active, your registrar nameservers point to Cloudflare, and your API token has `Zone:Read` plus `DNS:Edit` for that zone. If Cloudflare reports a conflict, remove any existing record at the same tunnel subdomain before applying the NS record.
+
 ### Routing Modes
 
 - **Single mode**: One active tunnel runs; DNS router on port 53 forwards to it

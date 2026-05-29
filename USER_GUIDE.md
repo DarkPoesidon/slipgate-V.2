@@ -83,7 +83,19 @@ The "right" VPS depends on where your users are.
 
 ## 4. Setting up your domain & DNS records
 
-You need one domain (e.g., `example.com`) that you control. Add these records before installing SlipGate:
+You need one domain (e.g., `example.com`) that you control.
+
+If your domain uses Cloudflare DNS, SlipGate can create the records during installation. You can either:
+- let the installer configure Cloudflare automatically, or
+- add the records manually before/after installation.
+
+For Cloudflare automatic DNS, prepare this first:
+- The root domain must be added to Cloudflare and show as **Active**.
+- Your registrar must use the Cloudflare nameservers for the domain.
+- Create a Cloudflare API token with **Zone:Read** and **DNS:Edit** permissions for this zone.
+- Keep records **DNS only** (gray cloud). SlipGate sets A/CNAME-style records to DNS-only automatically.
+
+Records SlipGate creates when Cloudflare automation is enabled:
 
 ```
 A    ns.example.com   →  <server IP>
@@ -111,6 +123,8 @@ dig +short A ns.example.com
 ```
 
 > If you're using **Cloudflare** for DNS, set the records to **DNS only** (gray cloud). Don't proxy them — the tunnel needs raw DNS at the server.
+
+If Cloudflare reports a conflict, remove the conflicting record from the same name first. For example, `t.example.com` cannot already have an `A`, `CNAME`, or `TXT` record if SlipGate needs to create `NS t.example.com → ns.example.com`.
 
 ---
 
@@ -615,7 +629,15 @@ SlipGate برای شما این کارها را انجام می‌دهد:
 
 ## ۴. تنظیم دامنه و رکوردهای DNS
 
-به یک دامنه نیاز دارید (مثلاً `example.com`). قبل از نصب SlipGate این رکوردها را اضافه کنید:
+به یک دامنه نیاز دارید (مثلاً `example.com`).
+
+اگر DNS دامنه روی Cloudflare است، SlipGate می‌تواند رکوردها را هنگام نصب خودکار بسازد. قبل از استفاده از حالت خودکار مطمئن شوید:
+- دامنه در Cloudflare اضافه شده و وضعیت آن **Active** است.
+- nameserverهای رجیسترار دامنه روی nameserverهای Cloudflare تنظیم شده‌اند.
+- API token شما برای همین zone دسترسی **Zone:Read** و **DNS:Edit** دارد.
+- رکوردها باید **DNS only** باشند (ابر خاکستری)، نه Proxied.
+
+رکوردهایی که SlipGate در حالت Cloudflare خودکار می‌سازد:
 
 ```
 A    ns.example.com   →  <server IP>
@@ -643,6 +665,8 @@ dig +short A ns.example.com
 ```
 
 > اگر از **Cloudflare** برای DNS استفاده می‌کنید، رکوردها را روی **DNS only** (ابر خاکستری) بگذارید. proxy نکنید — تونل به DNS خام روی سرور نیاز دارد.
+
+اگر Cloudflare خطای conflict داد، رکورد موجود روی همان نام را حذف یا اصلاح کنید. مثلاً `t.example.com` نمی‌تواند هم‌زمان رکورد `A`، `CNAME` یا `TXT` داشته باشد اگر SlipGate باید برای آن رکورد `NS t.example.com → ns.example.com` بسازد.
 
 ---
 

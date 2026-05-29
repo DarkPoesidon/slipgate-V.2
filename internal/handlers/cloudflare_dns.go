@@ -39,26 +39,39 @@ func offerCloudflareDNS(ctx *actions.Context, tunnels []config.TunnelConfig) {
 
 	out.Print("")
 	out.Print("  Cloudflare DNS setup")
-	out.Print("  This optional step creates the DNS records these tunnels need.")
-	out.Print("  DNS tunnel records are delegated to this server:")
-	out.Print("    A   ns.example.com -> this server IP")
-	out.Print("    NS  t.example.com  -> ns.example.com")
-	out.Print("  HTTPS proxy records point directly to this server:")
-	out.Print("    A   example.com    -> this server IP")
-	out.Print("  Records are created as DNS-only because tunnel traffic must reach")
-	out.Print("  this server directly. Required token permissions: Zone:Read, DNS:Edit.")
+	out.Print("  This step can create the Cloudflare DNS records automatically.")
+	out.Print("")
+	out.Print("  Before you continue, make sure:")
+	out.Print("    1) The root domain is added to Cloudflare and is Active.")
+	out.Print("    2) Your registrar nameservers point to the Cloudflare nameservers.")
+	out.Print("    3) Your API token has Zone:Read and DNS:Edit for this zone.")
+	out.Print("    4) Tunnel records must be DNS only (gray cloud), not proxied.")
+	out.Print("")
+	out.Print("  SlipGate will create/update these record types as needed:")
+	out.Print("    A   ns.<root-domain>      -> this server IPv4")
+	out.Print("    NS  <tunnel-subdomain>    -> ns.<root-domain>")
+	out.Print("    A   <naive/root-domain>   -> this server IPv4")
+	out.Print("")
+	out.Print("  Cloudflare note: NS records cannot share the same name with A,")
+	out.Print("  CNAME, TXT, or other records. If a conflict exists, SlipGate will")
+	out.Print("  skip that record and show exactly what must be removed or changed.")
 	out.Print("")
 
-	if !shouldPromptCloudflare(ctx) {
+	mode := cloudflareMode(ctx)
+	if mode == "skip" {
 		out.Print("  Cloudflare automation skipped in non-interactive mode.")
 		return
 	}
 
-	ok, err := prompt.Confirm("Automatically configure Cloudflare DNS records?")
-	if err != nil || !ok {
-		return
+	if mode != "force" {
+		ok, err := prompt.ConfirmYes("Automatically configure Cloudflare DNS records now?")
+		if err != nil || !ok {
+			out.Print("  Cloudflare automation skipped. Use the DNS records in the summary below.")
+			return
+		}
 	}
 
+	var err error
 	token := strings.TrimSpace(os.Getenv("CLOUDFLARE_API_TOKEN"))
 	if token == "" {
 		token, err = prompt.String("Cloudflare API token", "")
@@ -89,9 +102,14 @@ func offerCloudflareDNS(ctx *actions.Context, tunnels []config.TunnelConfig) {
 		out.Print(fmt.Sprintf("    %-4s %-28s -> %s", rec.Type, rec.Name, rec.Content))
 	}
 	out.Print("")
+	out.Print("  These records will be set to DNS only where Cloudflare supports proxying.")
+	out.Print("  Existing matching records are kept. Existing same-type records with")
+	out.Print("  different content are updated. Unsafe conflicts are skipped.")
+	out.Print("")
 
-	apply, err := prompt.Confirm("Apply these Cloudflare DNS changes?")
+	apply, err := prompt.ConfirmYes("Apply these Cloudflare DNS changes?")
 	if err != nil || !apply {
+		out.Print("  Cloudflare automation skipped before applying changes.")
 		return
 	}
 
@@ -105,10 +123,21 @@ func offerCloudflareDNS(ctx *actions.Context, tunnels []config.TunnelConfig) {
 }
 
 func shouldPromptCloudflare(ctx *actions.Context) bool {
-	if strings.EqualFold(ctx.GetArg("cloudflare-dns"), "yes") || strings.EqualFold(ctx.GetArg("cloudflare-dns"), "true") {
-		return true
+	return cloudflareMode(ctx) != "skip"
+}
+
+func cloudflareMode(ctx *actions.Context) string {
+	value := strings.ToLower(strings.TrimSpace(ctx.GetArg("cloudflare-dns")))
+	switch value {
+	case "yes", "true", "1", "on":
+		return "force"
+	case "no", "false", "0", "off":
+		return "skip"
 	}
-	return term.IsTerminal(int(os.Stdin.Fd()))
+	if term.IsTerminal(int(os.Stdin.Fd())) {
+		return "prompt"
+	}
+	return "skip"
 }
 
 func buildCloudflareDNSPlan(tunnels []config.TunnelConfig) []dnsRecordPlan {
@@ -261,6 +290,15 @@ func printCloudflareResult(out actions.OutputWriter, result dnsPlanResult) {
 	}
 	for _, msg := range result.Blocked {
 		out.Warning("Skipped conflicting record: " + msg)
+	}
+	if len(result.Created) == 0 && len(result.Updated) == 0 && len(result.Kept) == 0 && len(result.Blocked) == 0 {
+		out.Warning("No Cloudflare DNS records were changed.")
+		return
+	}
+	if len(result.Blocked) == 0 {
+		out.Success("Cloudflare DNS records are configured. No manual DNS setup is needed for the records above.")
+	} else {
+		out.Warning("Some Cloudflare DNS records still need manual cleanup because conflicts were detected.")
 	}
 }
 
