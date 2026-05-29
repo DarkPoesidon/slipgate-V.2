@@ -91,7 +91,7 @@ info "Running slipgate install..."
 # Route all I/O through /dev/tty so slipgate talks directly to the
 # controlling terminal regardless of how this script was invoked
 # (e.g. curl | sudo bash, where sudo's use_pty relay can stall output).
-if ! "${INSTALL_DIR}/slipgate" install </dev/tty >/dev/tty 2>/dev/tty; then
+if ! SLIPGATE_SIMPLE_PROMPT=1 "${INSTALL_DIR}/slipgate" install </dev/tty >/dev/tty 2>/dev/tty; then
     error "slipgate install failed — run 'sudo slipgate install' to retry"
 fi
 

@@ -57,6 +57,11 @@ func init() {
 func readLine(prompt string) (string, error) {
 	fd := int(os.Stdin.Fd())
 
+	if os.Getenv("SLIPGATE_SIMPLE_PROMPT") == "1" {
+		fmt.Print(prompt)
+		return readSimple()
+	}
+
 	if !term.IsTerminal(fd) {
 		fmt.Print(prompt)
 		return readSimple()
