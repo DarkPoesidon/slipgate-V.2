@@ -1,6 +1,7 @@
 package prompt
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"strconv"
@@ -144,12 +145,12 @@ func ConfirmYes(message string) (bool, error) {
 
 // readSimple is a fallback line reader for non-terminal input.
 func readSimple() (string, error) {
-	var buf [4096]byte
-	n, err := os.Stdin.Read(buf[:])
+	reader := bufio.NewReader(os.Stdin)
+	line, err := reader.ReadString('\n')
 	if err != nil {
 		return "", err
 	}
-	return sanitize(strings.TrimRight(string(buf[:n]), "\r\n")), nil
+	return sanitize(strings.TrimRight(line, "\r\n")), nil
 }
 
 // CollectInputs collects all required inputs for an action.
