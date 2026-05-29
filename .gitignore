@@ -1,0 +1,21 @@
+# Build artifacts
+slipgate
+slipgate-linux-*
+caddy
+caddy-naive
+
+# Go
+go/
+*.o
+*.a
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
