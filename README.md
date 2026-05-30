@@ -334,6 +334,8 @@ The one-click installer asks for a DNS setup mode after transport selection:
 
 Re-running the one-click installer in Cloudflare automatic mode also repairs and verifies DNS for an existing SlipGate configuration.
 
+On servers using `systemd-resolved`, SlipGate keeps server-side DNS resolution available while it configures Cloudflare. It only frees port `53` after the Cloudflare API step and repairs a stale `/etc/resolv.conf` stub link if needed.
+
 ### Routing Modes
 
 - **Single mode**: One active tunnel runs; DNS router on port 53 forwards to it

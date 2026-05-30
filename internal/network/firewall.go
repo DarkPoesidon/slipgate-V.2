@@ -2,6 +2,7 @@ package network
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,6 +12,8 @@ import (
 const (
 	iptablesRulesPath = "/etc/iptables/slipgate-rules.v4"
 	iptablesUnitPath  = "/etc/systemd/system/slipgate-iptables.service"
+	resolvConfPath    = "/etc/resolv.conf"
+	uplinkResolvPath  = "/run/systemd/resolve/resolv.conf"
 )
 
 // iptables-restore is invoked early at boot to re-apply rules saved by
@@ -204,20 +207,55 @@ func DisableResolvedStub() error {
 		return fmt.Errorf("write resolved config: %w", err)
 	}
 
-	// Restart systemd-resolved — after this, /etc/resolv.conf (whether a
-	// symlink to /run/systemd/resolve/resolv.conf or a static file
-	// managed elsewhere) will list the uplink DNS servers directly
-	// rather than the stub at 127.0.0.53. We intentionally do NOT write
-	// /etc/resolv.conf here: on most distros it's a symlink into
-	// systemd's runtime directory, so os.WriteFile follows the link and
-	// the target gets regenerated on the next network event. If you want
-	// public resolvers (for WARP compatibility), see
-	// warp.ensurePublicResolvers which sets them via resolved drop-in.
 	if err := run("systemctl", "restart", "systemd-resolved"); err != nil {
 		return fmt.Errorf("restart systemd-resolved: %w", err)
 	}
 
+	if err := repairResolvedResolvConf(); err != nil {
+		return err
+	}
+	if _, err := net.LookupHost("api.cloudflare.com"); err != nil {
+		return fmt.Errorf("verify DNS after disabling resolved stub: %w", err)
+	}
+
 	return nil
+}
+
+func repairResolvedResolvConf() error {
+	data, err := os.ReadFile(resolvConfPath)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("read %s: %w", resolvConfPath, err)
+	}
+	if err == nil && !resolverPointsAtStub(string(data)) {
+		return nil
+	}
+
+	if _, err := os.Stat(uplinkResolvPath); err == nil {
+		if err := os.Remove(resolvConfPath); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("remove stale %s: %w", resolvConfPath, err)
+		}
+		if err := os.Symlink(uplinkResolvPath, resolvConfPath); err != nil {
+			return fmt.Errorf("link %s to %s: %w", resolvConfPath, uplinkResolvPath, err)
+		}
+		return nil
+	}
+
+	if err := os.Remove(resolvConfPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove stale %s: %w", resolvConfPath, err)
+	}
+	if err := os.WriteFile(resolvConfPath, []byte("nameserver 1.1.1.1\nnameserver 8.8.8.8\n"), 0644); err != nil {
+		return fmt.Errorf("write fallback %s: %w", resolvConfPath, err)
+	}
+	return nil
+}
+
+func resolverPointsAtStub(content string) bool {
+	for _, line := range strings.Split(content, "\n") {
+		if strings.TrimSpace(line) == "nameserver 127.0.0.53" {
+			return true
+		}
+	}
+	return false
 }
 
 // FreePort kills any process listening on the given port/protocol.

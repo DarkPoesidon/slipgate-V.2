@@ -483,9 +483,6 @@ func handleSystemInstall(ctx *actions.Context) error {
 		if err := network.AllowPort(53, "udp"); err != nil {
 			out.Warning("Failed to open port 53/udp: " + err.Error())
 		}
-		if err := network.DisableResolvedStub(); err != nil {
-			out.Warning("Failed to disable systemd-resolved stub: " + err.Error())
-		}
 	}
 	if needsHTTPS {
 		if err := network.AllowPort(80, "tcp"); err != nil {
@@ -644,6 +641,15 @@ func handleSystemInstall(ctx *actions.Context) error {
 	if automaticDomains {
 		if err := offerCloudflareDNS(ctx, allTunnels); err != nil {
 			return err
+		}
+	}
+
+	// Keep the OS resolver available until Cloudflare API work is complete.
+	// Disabling the local stub too early can break hostname lookups on fresh
+	// Debian installs whose /etc/resolv.conf still points at 127.0.0.53.
+	if needsDNS {
+		if err := network.DisableResolvedStub(); err != nil {
+			return actions.NewError(actions.SystemInstall, "failed to prepare port 53 without breaking server DNS", err)
 		}
 	}
 
