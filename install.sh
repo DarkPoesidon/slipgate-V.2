@@ -279,6 +279,6 @@ main() {
     info "Done. Run 'sudo slipgate' to open the menu."
 }
 
-if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+if [[ "${BASH_SOURCE[0]:-$0}" == "$0" ]]; then
     main "$@"
 fi
