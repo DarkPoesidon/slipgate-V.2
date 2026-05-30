@@ -154,36 +154,63 @@ collect_transports() {
     echo "$value"
 }
 
+transports_need_dns() {
+    local transports="${1,,}"
+    local item
+    local -a items
+    transports="${transports// /}"
+    IFS=',' read -r -a items <<<"$transports"
+    for item in "${items[@]}"; do
+        case "$item" in
+            all|8|1|2|3|4|dnstt|slipstream|vaydns|naive) return 0 ;;
+        esac
+    done
+    return 1
+}
+
 collect_cloudflare_args() {
     local -n out_args_ref=$1
+    local transports="$2"
     local cf_choice="${SLIPGATE_CLOUDFLARE_DNS:-}"
     local cf_zone="${SLIPGATE_CLOUDFLARE_ZONE:-}"
     local cf_ip="${SLIPGATE_CLOUDFLARE_IP:-}"
     local cf_token="${CLOUDFLARE_API_TOKEN:-}"
 
+    if ! transports_need_dns "$transports"; then
+        out_args_ref+=(--cloudflare-dns "no")
+        return
+    fi
+
     echo >"$TTY"
-    echo "  Cloudflare DNS automation" >"$TTY"
-    echo "  SlipGate can create the required A and NS records automatically." >"$TTY"
+    echo "  DNS setup mode" >"$TTY"
+    echo "    1) Cloudflare automatic - SlipGate generates domains and creates DNS records" >"$TTY"
+    echo "    2) Manual DNS - you enter each domain and create records yourself" >"$TTY"
+    echo >"$TTY"
+
+    case "${cf_choice,,}" in
+        yes|true|1|on) ;;
+        no|false|0|off|2)
+            out_args_ref+=(--cloudflare-dns "no")
+            return
+            ;;
+        *)
+            cf_choice="$(ask "Choice" "1")"
+            if [[ "$cf_choice" != "1" ]]; then
+                out_args_ref+=(--cloudflare-dns "no")
+                return
+            fi
+            ;;
+    esac
+
+    echo >"$TTY"
+    echo "  Cloudflare automatic DNS" >"$TTY"
+    echo "  SlipGate will generate the required domains and create A and NS records." >"$TTY"
     echo "  Requirements:" >"$TTY"
     echo "    - Domain is added to Cloudflare and shows Active" >"$TTY"
     echo "    - Registrar nameservers point to Cloudflare" >"$TTY"
     echo "    - API token has Zone:Read and DNS:Edit (DNS Write) for this zone" >"$TTY"
     echo "    - Records are DNS only / gray cloud" >"$TTY"
     echo >"$TTY"
-
-    case "${cf_choice,,}" in
-        yes|true|1|on) ;;
-        no|false|0|off)
-            out_args_ref+=(--cloudflare-dns "no")
-            return
-            ;;
-        *)
-            if ! ask_yes_no "Configure Cloudflare DNS automatically during install?" "yes"; then
-                out_args_ref+=(--cloudflare-dns "no")
-                return
-            fi
-            ;;
-    esac
 
     if [[ -z "$cf_zone" ]]; then
         cf_zone="$(ask "Cloudflare zone/root domain (example.com)" "")"
@@ -242,7 +269,7 @@ main() {
     local -a install_args
     transports="$(collect_transports)"
     install_args=(install --transports "$transports")
-    collect_cloudflare_args install_args
+    collect_cloudflare_args install_args "$transports"
 
     info "Starting SlipGate installer..."
     if ! SLIPGATE_SIMPLE_PROMPT=1 "${INSTALL_DIR}/slipgate" "${install_args[@]}" <"$TTY" >"$TTY" 2>"$TTY"; then
@@ -252,4 +279,6 @@ main() {
     info "Done. Run 'sudo slipgate' to open the menu."
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    main "$@"
+fi

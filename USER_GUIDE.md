@@ -89,6 +89,10 @@ If your domain uses Cloudflare DNS, SlipGate can create the records during insta
 - let the installer configure Cloudflare automatically, or
 - add the records manually before/after installation.
 
+After you select transports, the installer asks for a DNS setup mode:
+- **Cloudflare automatic**: enter only your root zone, such as `example.com`. SlipGate generates the required protocol domains (`t`, `ts`, `s`, `ss`, `v`, `vs`) and creates/verifies their DNS records before starting services. It does not ask you to enter each protocol domain.
+- **Manual DNS**: enter each tunnel domain yourself and create the displayed records manually.
+
 For Cloudflare automatic DNS, prepare this first:
 - The root domain must be added to Cloudflare and show as **Active**.
 - Your registrar must use the Cloudflare nameservers for the domain.
@@ -636,6 +640,10 @@ SlipGate برای شما این کارها را انجام می‌دهد:
 - nameserverهای رجیسترار دامنه روی nameserverهای Cloudflare تنظیم شده‌اند.
 - API token شما برای همین zone دسترسی **Zone:Read** و **DNS:Edit** دارد.
 - رکوردها باید **DNS only** باشند (ابر خاکستری)، نه Proxied.
+
+بعد از انتخاب پروتکل‌ها، نصب‌کننده روش تنظیم DNS را می‌پرسد:
+- **Cloudflare automatic**: فقط دامنه اصلی مثل `example.com` را وارد کنید. SlipGate زیردامنه‌های لازم (`t`، `ts`، `s`، `ss`، `v`، `vs`) را می‌سازد و قبل از اجرای سرویس‌ها رکوردها را ایجاد و بررسی می‌کند. نیازی به وارد کردن دستی هر زیردامنه نیست.
+- **Manual DNS**: دامنه هر تونل و رکوردهای DNS را خودتان وارد و ایجاد کنید.
 
 رکوردهایی که SlipGate در حالت Cloudflare خودکار می‌سازد:
 

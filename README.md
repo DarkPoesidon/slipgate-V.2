@@ -327,6 +327,13 @@ During install, choose Cloudflare DNS automation if your domain is managed in Cl
 
 Before using it, make sure the Cloudflare zone is active, your registrar nameservers point to Cloudflare, and your API token has `Zone:Read` plus `DNS:Edit` for that zone. If Cloudflare reports a conflict, remove any existing record at the same tunnel subdomain before applying the NS record.
 
+The one-click installer asks for a DNS setup mode after transport selection:
+
+1. **Cloudflare automatic**: enter one root zone such as `example.com`. SlipGate generates the protocol domains (`t`, `ts`, `s`, `ss`, `v`, `vs`) and creates/verifies the required records before tunnel services start. It does not ask for each protocol domain manually.
+2. **Manual DNS**: enter protocol domains yourself and create the displayed records in your DNS provider.
+
+Re-running the one-click installer in Cloudflare automatic mode also repairs and verifies DNS for an existing SlipGate configuration.
+
 ### Routing Modes
 
 - **Single mode**: One active tunnel runs; DNS router on port 53 forwards to it

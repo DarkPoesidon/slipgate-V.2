@@ -67,6 +67,20 @@ func handleSystemInstall(ctx *actions.Context) error {
 		return actions.NewError(actions.SystemInstall, "no transports selected", nil)
 	}
 
+	automaticDomains := cloudflareMode(ctx) == "force"
+	automaticZone := normalizeDNSName(ctx.GetArg("cloudflare-zone"))
+	if automaticDomains && automaticZone == "" {
+		return actions.NewError(actions.SystemInstall, "Cloudflare automatic DNS requires --cloudflare-zone", nil)
+	}
+	if automaticDomains {
+		out.Print("")
+		out.Print("  ── Domain Setup ────────────────────────────────────")
+		out.Print("")
+		out.Success(fmt.Sprintf("Cloudflare automatic DNS selected for %s", automaticZone))
+		out.Print("  SlipGate will generate tunnel domains and create the required DNS records.")
+		out.Print("  Per-protocol domain prompts are skipped in automatic mode.")
+	}
+
 	// Offer dnstm cleanup only if dnstm is present (may prompt).
 	if _, err := offerDnstmCleanup(out, actions.SystemInstall); err != nil {
 		return err
@@ -172,32 +186,39 @@ func handleSystemInstall(ctx *actions.Context) error {
 			continue
 		}
 
-		// Domain-based transports: collect domain, MTU, record type.
-		var domainHint, domainDefault string
-		switch {
-		case selectedTransport == config.TransportNaive && knownParent != "":
-			domainHint, domainDefault = knownParent, knownParent
-		case selectedTransport == config.TransportNaive:
-			domainHint = "example.com"
-		case selectedTransport == config.TransportSlipstream && knownParent != "":
-			domainHint = "s." + knownParent
-			domainDefault = "s." + knownParent
-		case selectedTransport == config.TransportSlipstream:
-			domainHint = "s.example.com"
-		case selectedTransport == config.TransportVayDNS && knownParent != "":
-			domainHint = "v." + knownParent
-			domainDefault = "v." + knownParent
-		case selectedTransport == config.TransportVayDNS:
-			domainHint = "v.example.com"
-		case selectedTransport == config.TransportDNSTT && knownParent != "":
-			domainHint = "t." + knownParent
-			domainDefault = "t." + knownParent
-		default:
-			domainHint = "t.example.com"
-		}
-		domain, err := prompt.String(fmt.Sprintf("Domain for %s (e.g. %s)", displayName, domainHint), domainDefault)
-		if err != nil {
-			return err
+		// Domain-based transports: automatically derive domains from one
+		// Cloudflare zone, or collect them manually in manual DNS mode.
+		domain := ""
+		if automaticDomains {
+			domain = automaticTunnelDomain(selectedTransport, backends[0], automaticZone)
+			out.Info(fmt.Sprintf("Generated domain for %s: %s", displayName, domain))
+		} else {
+			var domainHint, domainDefault string
+			switch {
+			case selectedTransport == config.TransportNaive && knownParent != "":
+				domainHint, domainDefault = knownParent, knownParent
+			case selectedTransport == config.TransportNaive:
+				domainHint = "example.com"
+			case selectedTransport == config.TransportSlipstream && knownParent != "":
+				domainHint = "s." + knownParent
+				domainDefault = "s." + knownParent
+			case selectedTransport == config.TransportSlipstream:
+				domainHint = "s.example.com"
+			case selectedTransport == config.TransportVayDNS && knownParent != "":
+				domainHint = "v." + knownParent
+				domainDefault = "v." + knownParent
+			case selectedTransport == config.TransportVayDNS:
+				domainHint = "v.example.com"
+			case selectedTransport == config.TransportDNSTT && knownParent != "":
+				domainHint = "t." + knownParent
+				domainDefault = "t." + knownParent
+			default:
+				domainHint = "t.example.com"
+			}
+			domain, err = prompt.String(fmt.Sprintf("Domain for %s (e.g. %s)", displayName, domainHint), domainDefault)
+			if err != nil {
+				return err
+			}
 		}
 		if domain == "" {
 			out.Warning(fmt.Sprintf("Skipping %s (no domain)", displayName))
@@ -257,18 +278,18 @@ func handleSystemInstall(ctx *actions.Context) error {
 			if backend == "both" && selectedTransport != config.TransportNaive {
 				tag = cfg.UniqueTag(selectedTransport + "-" + b)
 				if b == config.BackendSSH {
-					parentDomain := baseDomain(domain)
-					sshHint := "ts." + parentDomain
-					if selectedTransport == config.TransportSlipstream {
-						sshHint = "ss." + parentDomain
-					} else if selectedTransport == config.TransportVayDNS {
-						sshHint = "vs." + parentDomain
+					if automaticDomains {
+						tunnelDomain = automaticTunnelDomain(selectedTransport, b, automaticZone)
+						out.Info(fmt.Sprintf("Generated domain for %s: %s", tag, tunnelDomain))
+					} else {
+						parentDomain := baseDomain(domain)
+						sshHint := automaticTunnelDomain(selectedTransport, b, parentDomain)
+						sshDomain, err := prompt.String(fmt.Sprintf("Domain for %s", tag), sshHint)
+						if err != nil {
+							return err
+						}
+						tunnelDomain = sshDomain
 					}
-					sshDomain, err := prompt.String(fmt.Sprintf("Domain for %s", tag), sshHint)
-					if err != nil {
-						return err
-					}
-					tunnelDomain = sshDomain
 				}
 			}
 
@@ -330,6 +351,14 @@ func handleSystemInstall(ctx *actions.Context) error {
 	}
 
 	if len(plannedTunnels) == 0 {
+		if automaticDomains && len(cfg.Tunnels) > 0 {
+			out.Info("No new tunnels were needed. Applying Cloudflare DNS to existing tunnels...")
+			if err := offerCloudflareDNS(ctx, cfg.Tunnels); err != nil {
+				return err
+			}
+			out.Success("Existing tunnel DNS records are configured and verified.")
+			return nil
+		}
 		out.Warning("No tunnels created.")
 		return nil
 	}
@@ -602,6 +631,14 @@ func handleSystemInstall(ctx *actions.Context) error {
 		return actions.NewError(actions.SystemInstall, "failed to save config", err)
 	}
 
+	// In automatic Cloudflare mode, publish and verify DNS before starting
+	// services. NaiveProxy needs its A record in place before Caddy requests TLS.
+	if automaticDomains {
+		if err := offerCloudflareDNS(ctx, allTunnels); err != nil {
+			return err
+		}
+	}
+
 	// Create and start systemd services.
 	for i := range allTunnels {
 		if allTunnels[i].IsDNSTunnel() && allTunnels[i].Port > 0 {
@@ -704,8 +741,10 @@ func handleSystemInstall(ctx *actions.Context) error {
 		}
 	}
 
-	if err := offerCloudflareDNS(ctx, allTunnels); err != nil {
-		return err
+	if !automaticDomains {
+		if err := offerCloudflareDNS(ctx, allTunnels); err != nil {
+			return err
+		}
 	}
 
 	// ── Summary ────────────────────────────────────────────────────
@@ -884,6 +923,30 @@ func parseInstallTransports(raw string) ([]string, error) {
 	}
 
 	return result, nil
+}
+
+func automaticTunnelDomain(transport, backend, zone string) string {
+	zone = normalizeDNSName(zone)
+	if transport == config.TransportNaive {
+		return zone
+	}
+
+	prefix := ""
+	switch transport {
+	case config.TransportDNSTT:
+		prefix = "t"
+	case config.TransportSlipstream:
+		prefix = "s"
+	case config.TransportVayDNS:
+		prefix = "v"
+	}
+	if backend == config.BackendSSH {
+		prefix += "s"
+	}
+	if prefix == "" {
+		return zone
+	}
+	return prefix + "." + zone
 }
 
 // naiveAwareVariants returns the (backend, tag) pairs that should each
