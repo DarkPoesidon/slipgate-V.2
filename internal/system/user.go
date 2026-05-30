@@ -65,6 +65,13 @@ func EnsureDir(path, owner string) error {
 // AddSSHUser creates a system user in the slipgate-ssh group.
 // If the user already exists, it updates the password instead.
 func AddSSHUser(username, password string) error {
+	if err := config.ValidateUsername(username); err != nil {
+		return err
+	}
+	if err := config.ValidatePassword(password); err != nil {
+		return err
+	}
+
 	// Ensure SSH group exists
 	if !groupExists(config.SSHGroup) {
 		if err := run("groupadd", "--system", config.SSHGroup); err != nil {

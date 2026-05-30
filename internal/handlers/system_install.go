@@ -19,6 +19,7 @@ import (
 	"github.com/anonvector/slipgate/internal/network"
 	"github.com/anonvector/slipgate/internal/prompt"
 	"github.com/anonvector/slipgate/internal/proxy"
+	"github.com/anonvector/slipgate/internal/service"
 	"github.com/anonvector/slipgate/internal/system"
 	"github.com/anonvector/slipgate/internal/transport"
 	"github.com/anonvector/slipgate/internal/warp"
@@ -92,6 +93,10 @@ func handleSystemInstall(ctx *actions.Context) error {
 	cfg, err := config.Load()
 	if err != nil {
 		cfg = config.Default()
+	}
+	if automaticDomains && len(cfg.Tunnels) > 0 {
+		out.Info("Resetting existing tunnel definitions for a clean automatic DNS reinstall...")
+		resetInstallTunnels(cfg, out)
 	}
 
 	needsBackend := false
@@ -386,6 +391,9 @@ func handleSystemInstall(ctx *actions.Context) error {
 		newUsername, err = prompt.String("Username", "user1")
 		if err != nil {
 			return err
+		}
+		if err := config.ValidateUsername(newUsername); err != nil {
+			return actions.NewError(actions.SystemInstall, err.Error(), nil)
 		}
 		newPassword, err = prompt.String("Password (leave blank to generate)", "")
 		if err != nil {
@@ -854,6 +862,21 @@ func handleSystemInstall(ctx *actions.Context) error {
 	out.Print("")
 
 	return nil
+}
+
+func resetInstallTunnels(cfg *config.Config, out actions.OutputWriter) {
+	for _, tunnel := range cfg.Tunnels {
+		svcName := service.TunnelServiceName(tunnel.Tag)
+		_ = service.Stop(svcName)
+		_ = service.Remove(svcName)
+		if err := os.RemoveAll(config.TunnelDir(tunnel.Tag)); err != nil {
+			out.Warning(fmt.Sprintf("Failed to remove old tunnel directory for %s: %v", tunnel.Tag, err))
+		}
+	}
+	cfg.Tunnels = nil
+	cfg.Route.Active = ""
+	cfg.Route.Default = ""
+	cfg.Route.Mode = "single"
 }
 
 // naiveURIVariant is one client-visible flavor of a server-side NaiveProxy

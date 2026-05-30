@@ -6,6 +6,7 @@ import (
 )
 
 var tagRegex = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
+var usernameRegex = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
 
 // Validate checks the entire config for errors.
 func (c *Config) Validate() error {
@@ -97,6 +98,15 @@ func ValidatePassword(p string) error {
 		if r < 0x20 || r == 0x7F {
 			return fmt.Errorf("password cannot contain control characters (position %d)", i)
 		}
+	}
+	return nil
+}
+
+// ValidateUsername checks the portable Linux account-name subset used by
+// useradd, chpasswd, SSH, and the SOCKS credential file.
+func ValidateUsername(username string) error {
+	if !usernameRegex.MatchString(username) {
+		return fmt.Errorf("username must start with a lowercase letter or underscore and contain only lowercase letters, numbers, underscores, or hyphens (maximum 32 characters)")
 	}
 	return nil
 }

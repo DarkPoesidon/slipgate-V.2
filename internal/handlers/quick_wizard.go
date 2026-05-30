@@ -223,6 +223,9 @@ func handleQuickWizard(ctx *actions.Context) error {
 		if err != nil {
 			return err
 		}
+		if err := config.ValidateUsername(username); err != nil {
+			return actions.NewError(actions.QuickWizard, err.Error(), nil)
+		}
 		password, err = prompt.String("Password (leave blank to generate)", "")
 		if err != nil {
 			return err

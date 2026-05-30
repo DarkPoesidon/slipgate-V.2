@@ -304,6 +304,9 @@ func createUserInteractive(cfg *config.Config, out actions.OutputWriter, provide
 	if username == "" {
 		return fmt.Errorf("username is required")
 	}
+	if err := config.ValidateUsername(username); err != nil {
+		return err
+	}
 	if cfg.GetUser(username) != nil {
 		return fmt.Errorf("user %q already exists", username)
 	}
